@@ -1,0 +1,68 @@
+name: Twitter Monitor
+
+on:
+  schedule:
+    # Run every 15 minutes
+    - cron: '*/15 * * * *'
+  workflow_dispatch:  # Allows manual trigger for testing
+
+jobs:
+  check_tweets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tweet monitor
+        env:
+          # Twitter API OAuth credentials
+          TWITTER_CONSUMER_KEY: ${{ secrets.TWITTER_CONSUMER_KEY }}
+          TWITTER_CONSUMER_SECRET: ${{ secrets.TWITTER_CONSUMER_SECRET }}
+          TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
+          TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
+          TWITTER_ACCOUNT_TO_MONITOR: ${{ secrets.TWITTER_ACCOUNT_TO_MONITOR }}
+          
+          # Twilio credentials for SMS
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_FROM_NUMBER: ${{ secrets.TWILIO_FROM_NUMBER }}
+          TWILIO_TO_NUMBER: ${{ secrets.TWILIO_TO_NUMBER }}
+          
+          # Last checked tweet ID and first run flag
+          LAST_TWEET_ID: ${{ secrets.LAST_TWEET_ID }}
+          FIRST_RUN: ${{ secrets.FIRST_RUN || 'true' }}
+        run: python twitter_monitor.py
+
+      - name: Update secrets
+        if: success()
+        uses: gliech/create-github-secret-action@v1
+        with:
+          name: LAST_TWEET_ID
+          value: ${{ env.NEW_LAST_TWEET_ID }}
+          pa_token: ${{ secrets.PA_TOKEN }}
+          
+      - name: Update first run flag
+        if: success() && env.FIRST_RUN == 'true'
+        uses: gliech/create-github-secret-action@v1
+        with:
+          name: FIRST_RUN
+          value: 'false'
+          pa_token: ${{ secrets.PA_TOKEN }}
