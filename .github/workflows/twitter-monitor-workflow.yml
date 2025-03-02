@@ -54,7 +54,7 @@ jobs:
         with:
           name: LAST_TWEET_ID
           value: ${{ env.NEW_LAST_TWEET_ID }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          pa_token: ${{ secrets.PAT_TOKEN }}
           
       - name: Update first run flag
         if: success() && env.FIRST_RUN == 'true'
@@ -62,4 +62,4 @@ jobs:
         with:
           name: FIRST_RUN
           value: 'false'
-          token: ${{ secrets.GITHUB_TOKEN }}
+          pa_token: ${{ secrets.PAT_TOKEN }}
