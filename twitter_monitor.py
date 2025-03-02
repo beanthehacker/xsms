@@ -3,31 +3,54 @@ import sys
 import tweepy
 from twilio.rest import Client
 
-def get_latest_tweets(consumer_key, consumer_secret, access_token, access_token_secret, username, since_id=None):
+def get_latest_tweets(bearer_token, user_id, since_id=None):
     """
-    Get the latest tweets from a specific user using OAuth 1.0a (works for private accounts)
+    Get the latest tweets from a specific user using OAuth 2.0 Bearer Token (Twitter API v2)
     """
-    # Set up OAuth 1.0a authentication
-    auth = tweepy.OAuth1UserHandler(
-        consumer_key, consumer_secret,
-        access_token, access_token_secret
-    )
-    
-    # Create API object
-    api = tweepy.API(auth)
+    # Create client with Bearer Token (OAuth 2.0)
+    client = tweepy.Client(bearer_token=bearer_token)
     
     try:
+        # Define tweet fields to retrieve
+        tweet_fields = ['created_at', 'text', 'id']
+        
         # Get tweets from the user
         if since_id:
-            tweets = api.user_timeline(screen_name=username, count=10, tweet_mode="extended", since_id=since_id)
+            response = client.get_users_tweets(
+                id=user_id,
+                max_results=10,
+                tweet_fields=tweet_fields,
+                since_id=since_id
+            )
         else:
-            tweets = api.user_timeline(screen_name=username, count=10, tweet_mode="extended")
+            response = client.get_users_tweets(
+                id=user_id,
+                max_results=10,
+                tweet_fields=tweet_fields
+            )
         
-        return tweets
+        return response.data or []
     
     except tweepy.TweepyException as e:
         print(f"Error fetching tweets: {str(e)}")
         return []
+
+def get_user_id(bearer_token, username):
+    """
+    Get the user ID from username using Twitter API v2
+    """
+    client = tweepy.Client(bearer_token=bearer_token)
+    
+    try:
+        response = client.get_user(username=username)
+        if response.data:
+            return response.data.id
+        else:
+            print(f"User {username} not found")
+            return None
+    except tweepy.TweepyException as e:
+        print(f"Error getting user ID: {str(e)}")
+        return None
 
 def send_sms(account_sid, auth_token, from_number, to_number, message):
     """
@@ -45,10 +68,7 @@ def send_sms(account_sid, auth_token, from_number, to_number, message):
 
 if __name__ == "__main__":
     # Get environment variables
-    consumer_key = os.environ.get('TWITTER_CONSUMER_KEY')
-    consumer_secret = os.environ.get('TWITTER_CONSUMER_SECRET')
-    access_token = os.environ.get('TWITTER_ACCESS_TOKEN')
-    access_token_secret = os.environ.get('TWITTER_ACCESS_TOKEN_SECRET')
+    bearer_token = os.environ.get('TWITTER_BEARER_TOKEN')
     account_to_monitor = os.environ.get('TWITTER_ACCOUNT_TO_MONITOR')
     
     twilio_account_sid = os.environ.get('TWILIO_ACCOUNT_SID')
@@ -60,23 +80,25 @@ if __name__ == "__main__":
     first_run = os.environ.get('FIRST_RUN', 'true').lower() == 'true'
     
     # Validate required env vars
-    if not all([consumer_key, consumer_secret, access_token, access_token_secret, 
-               account_to_monitor, twilio_account_sid, twilio_auth_token, 
-               twilio_from_number, twilio_to_number]):
+    if not all([bearer_token, account_to_monitor, twilio_account_sid, 
+               twilio_auth_token, twilio_from_number, twilio_to_number]):
         print("Missing required environment variables")
         sys.exit(1)
     
+    # Get user ID from username
+    user_id = get_user_id(bearer_token, account_to_monitor)
+    if not user_id:
+        print(f"Could not find user ID for {account_to_monitor}")
+        sys.exit(1)
+    
     # Get latest tweets
-    tweets = get_latest_tweets(
-        consumer_key, consumer_secret, access_token, access_token_secret,
-        account_to_monitor, last_tweet_id
-    )
+    tweets = get_latest_tweets(bearer_token, user_id, last_tweet_id)
     
     if not tweets:
         print("No new tweets found or error occurred")
         sys.exit(0)
     
-    # Process tweets (tweets are already in reverse chronological order in tweepy)
+    # Process tweets
     if tweets:
         newest_id = str(tweets[0].id)
         
@@ -91,11 +113,7 @@ if __name__ == "__main__":
         
         # Send SMS for each new tweet
         for tweet in reversed(tweets):  # Process oldest to newest
-            # Get full text (handles retweets properly)
-            if hasattr(tweet, 'full_text'):
-                tweet_text = tweet.full_text
-            else:
-                tweet_text = tweet.text
+            tweet_text = tweet.text
                 
             # Format URL to the tweet
             tweet_url = f"https://twitter.com/{account_to_monitor}/status/{tweet.id}"
