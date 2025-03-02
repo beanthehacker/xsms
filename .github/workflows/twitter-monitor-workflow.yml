@@ -46,7 +46,16 @@ jobs:
           # Last checked tweet ID and first run flag
           LAST_TWEET_ID: ${{ secrets.LAST_TWEET_ID }}
           FIRST_RUN: ${{ secrets.FIRST_RUN || 'true' }}
-        run: python twitter_monitor.py
+          
+          # Enable detailed logging
+          VERBOSE_LOGGING: 'true'
+        run: |
+          echo "Starting tweet monitor with:"
+          echo "Account to monitor: $TWITTER_ACCOUNT_TO_MONITOR"
+          echo "Last tweet ID: $LAST_TWEET_ID"
+          echo "First run: $FIRST_RUN"
+          python twitter_monitor.py
+          echo "Tweet monitor completed"
 
       - name: Update secrets
         if: success()
