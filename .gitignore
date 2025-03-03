@@ -1,1 +1,6 @@
 .env
+
+twitter_monitor.log
+*.log
+latest_tweet.json
+debug_screenshot.png
